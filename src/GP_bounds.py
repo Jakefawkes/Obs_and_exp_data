@@ -61,6 +61,35 @@ class MultitaskGPModel(gpytorch.models.ExactGP):
 
         return gpytorch.distributions.MultivariateNormal(mean_x, covar)
     
+    def pred_CATE(self,x):
+
+        n = x.shape[0]
+
+        zeros_like_x = torch.full((x.shape[0],1), dtype=torch.long, fill_value=0)
+        ones_like_x = torch.full((x.shape[0],1), dtype=torch.long, fill_value=1)
+
+        out = self(torch.cat([x, x]),torch.cat([ones_like_x, zeros_like_x]))
+        
+        mean = out.mean.detach()[:n] - out.mean.detach()[n:]
+        
+        covar = out.lazy_covariance_matrix
+        stdv = (covar[:n,:n].diag()+covar[n:,n:].diag() - 2*covar[n:,:n].diag()).detach()
+        return mean, stdv 
+    
+    def bound_CATE(self,X_test,sqrbeta,add_vec=None):
+
+        
+        mean,stddev_bound = self.pred_CATE(X_test)
+        
+        if add_vec == None:
+            add_vec = torch.zeros_like(mean)
+
+        mean = mean + add_vec
+
+        bounds = torch.cat([mean - sqrbeta * stddev_bound,torch.flip(mean + sqrbeta * stddev_bound,[0])])
+
+        return bounds, mean, stddev_bound
+    
 
 def train(train_x, train_y, model0, likelihood0, n_training_iter):
     # Use the adam optimizer

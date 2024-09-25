@@ -1,0 +1,47 @@
+################################################################################
+#   Twins ranking linear config
+# Run python experiments/GP/simulated_plot_exp/assesing_bounds.py --cfg=experiments/GP/simulated_plot_exp/assesing_bounds.yaml --o=results/simulated_plot_exp
+################################################################################
+
+data: 
+  
+  T_prop : 0.5
+  
+  n_samples_exp : 200
+
+  n_samples_obs : 1000
+  
+  sigma_noise: 0.5
+
+  exp_range: [-1,1]
+
+  obs_range : [-3,3]
+
+  outcome_funcs: plot_outcome_funcs
+
+  data_generating_kernel: RBF
+
+  num_samples_RFF: RBF
+
+models : 
+
+  model_list: [trained_MTGP,fixed_MTGP,standard_GP]
+  
+  Kernel_0: RBF
+
+  Kernel_1 :  RBF
+
+  likelihood: Guassian
+
+  lr: 0.1
+
+experiment:
+
+    seed: Null
+
+    hyperparam_train: True
+
+    n_runs: 100
+
+    surpress_warnings: True
+

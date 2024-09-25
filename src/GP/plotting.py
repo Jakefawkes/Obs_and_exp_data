@@ -94,8 +94,8 @@ def obs_exp_pseudo_plot(obs_data,exp_data,outcome_funcs,T_prop=0.5):
     for i in range(3):
         axs[i].legend(labels=["T=0","T=1"])
         leg = axs[i].get_legend()
-        for j in range(2):
-            leg.legendHandles[j].set_color(col[j])
+        # for j in range(2):
+        #     leg.legendHandles[j].set_color(col[j])
         axs[i].set_xlabel("X")
             
     axs[0].set_ylabel("Y")

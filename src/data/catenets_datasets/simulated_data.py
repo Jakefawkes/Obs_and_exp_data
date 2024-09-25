@@ -130,6 +130,7 @@ def simulate_treatment_setup(
     y_std = y.std() 
 
     y = (y-y_mean)/y_std
+    
     cate = cate/y_std
     return X, y, w, p, cate
 

@@ -1,0 +1,176 @@
+"""
+Description : Repeats the experiment from figure
+
+Usage: assesing_bounds.py  [options] --cfg=<path_to_config> --o=<output_dir>
+
+Options:
+  --cfg=<path_to_config>           Path to YAML configuration file to use.
+  --o=<output_dir>                 Output directory.
+"""
+
+import math
+import torch
+import gpytorch
+from matplotlib import pyplot as plt
+import sys
+import os
+import yaml
+from docopt import docopt
+import random
+from tqdm import tqdm
+from datetime import datetime
+import warnings
+
+running_dir = os.getcwd()
+main_dir = running_dir.split("experiments")[0]
+# Add the parent directory to the Python path
+sys.path.append(main_dir)
+
+from src.GP.data import *
+from src.GP.plotting import *
+from src.GP.GP import *
+from src.GP.utils import *
+
+args = docopt(__doc__)
+
+# Load config file
+with open(args['--cfg'], "r") as f:
+    cfg = yaml.safe_load(f)
+
+if cfg["experiment"]["surpress_warnings"]:
+    warnings.filterwarnings("ignore")
+
+outcome_func_dict = {
+    "plot_outcome_funcs":plot_outcome_funcs
+}
+
+experiment_outcome_funcs = outcome_func_dict[cfg["data"]["outcome_funcs"]]
+
+GP_model_dict = {
+    "fixed_MTGP":FixedPseudoOutcome_MultitaskGPModel,
+    "standard_GP":PseudoOutcome_StandardGPModel,
+    "trained_MTGP":TrainedPseudoOutcome_MultitaskGPModel
+}
+
+likelihood_dict = {
+    "Guassian": gpytorch.likelihoods.GaussianLikelihood
+}
+
+kernel_dict = {
+    "RBF": gpytorch.kernels.RBFKernel
+}
+
+if cfg["experiment"]["seed"] is not None:
+
+    seed = cfg["experiment"]["seed"]
+    random.seed(seed)
+    torch.manual_seed(0)
+
+T_prop = cfg["data"]["T_prop"]
+
+cfoundeded_CATE_func = lambda X,T: experiment_outcome_funcs.cfounded_func(X,1) - experiment_outcome_funcs.cfounded_func(X,0)
+
+results_dict = {}
+
+# Create output directory if doesn't exists
+now = datetime.now()
+date_time_str = now.strftime("%m-%d %H:%M:%S")
+direct_path = os.path.join(args['--o'],date_time_str.replace(" ","-"))
+os.makedirs(direct_path, exist_ok=True)
+with open(os.path.join(direct_path, 'cfg.yaml'), 'w') as f:
+    yaml.dump(cfg, f)
+dump_path = os.path.join(direct_path, 'results.metrics')
+
+for model_name in cfg["models"]["model_list"]:
+    results_dict[model_name] = {
+        "MSE_ID" : [],
+        "COVERAGE_ID": [],
+        "Interval_width_ID": [],
+        "MSE_OD" : [],
+        "COVERAGE_OD": [],
+        "Interval_width_OD": [],
+    }
+
+print("Starting")
+
+for i in tqdm(range(cfg["experiment"]["n_runs"])):
+
+    exp_data,_,outcome_funcs_GP = get_train_data_GP_1d(plot_outcome_funcs,
+                            n_samples_exp = cfg["data"]["n_samples_exp"],
+                            n_samples_obs = cfg["data"]["n_samples_obs"], 
+                            exp_range = cfg["data"]["exp_range"],
+                            obs_range = cfg["data"]["obs_range"],
+                            T_prop = T_prop,
+                            sigma_noise=cfg["data"]["sigma_noise"],
+                            kernel=cfg["data"]["data_generating_kernel"],
+                            kernel=cfg["data"]["num_samples_RFF"])
+        
+    pseudo_data = get_pseudo_outcome_data(exp_data,T_prop=T_prop)
+    pseudo_data_adjusted = adjust_data(pseudo_data,cfoundeded_CATE_func)
+
+    for model_name in cfg["models"]["model_list"]:
+
+        likelihood = likelihood_dict[cfg["models"]["likelihood"]]()
+
+        kernel_list = [
+
+        ]
+        model = GP_model_dict[model_name](
+            train_x_T = (pseudo_data_adjusted.X,pseudo_data_adjusted.T),
+            train_y = pseudo_data_adjusted.Y,
+            likelihood = likelihood,
+            p_score = T_prop,
+        )
+
+        model.train()
+        likelihood.train()
+        if cfg["experiment"]["hyperparam_train"]:
+
+            # Use the adam optimizer
+            optimizer = torch.optim.Adam(model.parameters(), lr=cfg["models"]["lr"])  # Includes GaussianLikelihood parameters
+
+            # "Loss" for GPs - the marginal log likelihood
+            mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+
+            for i in range(training_iterations):
+                optimizer.zero_grad()
+                output = model(pseudo_data_adjusted.X, pseudo_data_adjusted.T)
+                loss = -mll(output, pseudo_data_adjusted.Y)
+                loss.backward()
+                optimizer.step()
+        
+        model.eval()
+        likelihood.eval()
+
+        CATE_GAP_func = return_CATE_GAP(outcome_funcs_GP)
+
+        X_in_dist = torch.linspace(cfg["data"]["exp_range"][0], cfg["data"]["exp_range"][1], 1000)
+
+        x = X_in_dist
+        CATE_GAP_ID = CATE_GAP_func(x)
+        CATE_pred_guas_ID = model.CATE(x)
+        MSE_ID, COVERAGE_ID, Interval_width_ID = compare_cate_to_guas(CATE_GAP_ID,CATE_pred_guas_ID)
+
+        results_dict[model_name]["MSE_ID"].append(MSE_ID)
+        results_dict[model_name]["COVERAGE_ID"].append(COVERAGE_ID)
+        results_dict[model_name]["Interval_width_ID"].append(Interval_width_ID)
+        
+        X_out_dist = torch.linspace(cfg["data"]["obs_range"][0], cfg["data"]["obs_range"][1], 1000)
+        X_out_dist = X_out_dist[torch.logical_or(
+            X_out_dist < cfg["data"]["exp_range"][0], X_out_dist > cfg["data"]["exp_range"][1]
+        )]
+
+        x = X_out_dist
+        CATE_GAP_OD = CATE_GAP_func(x)
+        CATE_pred_guas_OD = model.CATE(x)
+        MSE_OD, COVERAGE_OD, Interval_width_OD = compare_cate_to_guas(CATE_GAP_OD,CATE_pred_guas_OD)
+
+        results_dict[model_name]["MSE_OD"].append(MSE_OD)
+        results_dict[model_name]["COVERAGE_OD"].append(COVERAGE_OD)
+        results_dict[model_name]["Interval_width_OD"].append(Interval_width_OD)
+
+
+    with open(dump_path, 'w') as f:
+            yaml.dump(results_dict, f)
+
+

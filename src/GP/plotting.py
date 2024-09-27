@@ -81,9 +81,9 @@ def obs_exp_pseudo_plot(obs_data,exp_data,outcome_funcs,T_prop=0.5):
 
     fig, axs = plt.subplots(ncols=3,sharex=True,figsize=(16,4),sharey=True)
 
-    sns.scatterplot(x=obs_data.X,y=obs_data.Y,hue=obs_data.T,ax=axs[0])
-    sns.scatterplot(x=exp_data.X,y=exp_data.Y,hue=exp_data.T,ax=axs[1])
-    sns.scatterplot(x=pseudo_data.X,y=pseudo_data.Y,hue=pseudo_data.T,ax=axs[2])
+    sns.scatterplot(x=obs_data.X.squeeze(1),y=obs_data.Y,hue=obs_data.T,ax=axs[0])
+    sns.scatterplot(x=exp_data.X.squeeze(1),y=exp_data.Y,hue=exp_data.T,ax=axs[1])
+    sns.scatterplot(x=pseudo_data.X.squeeze(1),y=pseudo_data.Y,hue=pseudo_data.T,ax=axs[2])
 
     axs[0].set_title("Observational Data")
     axs[1].set_title("Experimental Data")
@@ -101,18 +101,18 @@ def obs_exp_pseudo_plot(obs_data,exp_data,outcome_funcs,T_prop=0.5):
     axs[0].set_ylabel("Y")
 
     for i in range(2):
-        X_plot = torch.linspace(-3, 3, 1000)
+        X_plot = torch.linspace(-3, 3, 1000).unsqueeze(1)
         Y_plot = outcome_funcs.cfounded_func(X_plot,i)
         axs[0].plot(X_plot, Y_plot, color='r')
         axs[0].plot(X_plot, Y_plot, label=r'$f(x)$',linewidth=2,color=col[i])
 
     for i in range(2):
-        X_plot = torch.linspace(-3, 3, 1000)
+        X_plot = torch.linspace(-3, 3, 1000).unsqueeze(1)
         Y_plot = outcome_funcs.uncfounded_func(X_plot,i)
         axs[1].plot(X_plot, Y_plot, color='r')
         axs[1].plot(X_plot, Y_plot, label=r'$f(x)$',linewidth=2,color=col[i])
 
-    X_plot = torch.linspace(-3, 3, 1000)
+    X_plot = torch.linspace(-3, 3, 1000).unsqueeze(1)
     Y_plot = outcome_funcs.uncfounded_func(X_plot,1) - outcome_funcs.uncfounded_func(X_plot,0)
     axs[2].plot(X_plot, Y_plot, color='r')
     axs[2].plot(X_plot, Y_plot, label=r'$f(x)$',linewidth=2,color="red")

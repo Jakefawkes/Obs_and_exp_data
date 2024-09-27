@@ -95,7 +95,7 @@ print("Starting")
 
 for i in tqdm(range(cfg["experiment"]["n_runs"])):
 
-    exp_data,_,outcome_funcs_GP = get_train_data_GP_1d(plot_outcome_funcs,
+    exp_data,_,outcome_funcs_GP = get_train_data_GP(plot_outcome_funcs,
                             n_samples_exp = cfg["data"]["n_samples_exp"],
                             n_samples_obs = cfg["data"]["n_samples_obs"], 
                             exp_range = cfg["data"]["exp_range"],
@@ -103,7 +103,8 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
                             T_prop = T_prop,
                             sigma_noise=cfg["data"]["sigma_noise"],
                             kernel=cfg["data"]["data_generating_kernel"],
-                            kernel=cfg["data"]["num_samples_RFF"])
+                            num_samples_RFF=cfg["data"]["num_samples_RFF"],
+                            d=cfg["data"]["d"])
         
     pseudo_data = get_pseudo_outcome_data(exp_data,T_prop=T_prop)
     pseudo_data_adjusted = adjust_data(pseudo_data,cfoundeded_CATE_func)
@@ -113,13 +114,15 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
         likelihood = likelihood_dict[cfg["models"]["likelihood"]]()
 
         kernel_list = [
-
+            kernel_dict[cfg["models"]["Kernel_0"]](ard_num_dims=cfg["data"]["d"]),
+            kernel_dict[cfg["models"]["Kernel_1"]](ard_num_dims=cfg["data"]["d"])
         ]
         model = GP_model_dict[model_name](
             train_x_T = (pseudo_data_adjusted.X,pseudo_data_adjusted.T),
             train_y = pseudo_data_adjusted.Y,
             likelihood = likelihood,
             p_score = T_prop,
+            kernel_list = kernel_list
         )
 
         model.train()
@@ -136,7 +139,7 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
                 optimizer.zero_grad()
                 output = model(pseudo_data_adjusted.X, pseudo_data_adjusted.T)
                 loss = -mll(output, pseudo_data_adjusted.Y)
-                loss.backward()
+                loss.backward(retain_graph=True)
                 optimizer.step()
         
         model.eval()
@@ -144,8 +147,12 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
 
         CATE_GAP_func = return_CATE_GAP(outcome_funcs_GP)
 
-        X_in_dist = torch.linspace(cfg["data"]["exp_range"][0], cfg["data"]["exp_range"][1], 1000)
+        X_range_exp = cfg["data"]["exp_range"]
 
+        X_range_obs = cfg["data"]["obs_range"]
+
+        X_in_dist = (X_range_exp[1] - X_range_exp[0]) * torch.rand((cfg["experiment"]["n_evaluation_samples"],cfg["data"]["d"])) + X_range_exp[0]
+                    
         x = X_in_dist
         CATE_GAP_ID = CATE_GAP_func(x)
         CATE_pred_guas_ID = model.CATE(x)
@@ -155,10 +162,11 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
         results_dict[model_name]["COVERAGE_ID"].append(COVERAGE_ID)
         results_dict[model_name]["Interval_width_ID"].append(Interval_width_ID)
         
-        X_out_dist = torch.linspace(cfg["data"]["obs_range"][0], cfg["data"]["obs_range"][1], 1000)
-        X_out_dist = X_out_dist[torch.logical_or(
-            X_out_dist < cfg["data"]["exp_range"][0], X_out_dist > cfg["data"]["exp_range"][1]
-        )]
+        X_out_dist = (X_range_exp[0] - X_range_obs[0]) * torch.rand(((int(cfg["experiment"]["n_evaluation_samples"]/2)),cfg["data"]["d"])) + X_range_exp[1]
+
+        X_out_dist = torch.cat([X_out_dist,
+                                (X_range_obs[1] - X_range_exp[1]) * torch.rand(((int(cfg["experiment"]["n_evaluation_samples"]/2)),cfg["data"]["d"])) + X_range_exp[1]],dim=0)
+
 
         x = X_out_dist
         CATE_GAP_OD = CATE_GAP_func(x)

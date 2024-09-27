@@ -10,8 +10,8 @@ data = namedtuple("data","X T Y")
 
 outcome_funcs = namedtuple("Outcome_funcs","cfounded_func uncfounded_func")
 
-cfoundeded_func_plot = lambda X,T: 1+T+X+2*T*X+0.5*X**2+0.75*T*X**2+2*(T-0.5)*X**2
-uncfoundeded_func_plot = lambda X,T: 1+T+X+2*T*X+0.5*X**2+0.75*T*X**2
+cfoundeded_func_plot = lambda X,T: 1+T+X[:,0]+2*T*X[:,0]+0.5*X[:,0]**2+0.75*T*X[:,0]**2+2*(T-0.5)*X[:,0]**2
+uncfoundeded_func_plot = lambda X,T: 1+T+X[:,0]+2*T*X[:,0]+0.5*X[:,0]**2+0.75*T*X[:,0]**2
 
 plot_outcome_funcs = outcome_funcs(cfounded_func=cfoundeded_func_plot,
               uncfounded_func=uncfoundeded_func_plot)
@@ -102,21 +102,34 @@ hyperparam_dict = {
 
 }
 
+def RFF_GP(dimx,num_samples):
+    rff_kern = gpytorch.kernels.RFFKernel(num_samples=num_samples,num_dims=dimx)
+    weights = torch.randn(2*num_samples,requires_grad=False)
+    def GP(X):
+        z = rff_kern._featurize(x=X,normalize=True)
+        return (z @ weights).squeeze()
+    return GP
+    
 def GP_func(X_range,
                d=1,N_eval_points=5000,train_data=None,likelihood=None,scale=1,kernel="RBF",num_samples_RFF=100):
     if d==1: 
         X_eval = torch.linspace(X_range[0],X_range[1],steps=N_eval_points)
         Y_eval = get_gp_samples(X_eval,train_data=train_data,likelihood=likelihood,kernel=kernel,num_samples_RFF=num_samples_RFF)
         def GP(X):
+            if len(X.shape) > 1:
+                X.squeeze() 
             a = ((N_eval_points-1)*(X-X_range[0])/(X_range[1]-X_range[0])).int()
-            return scale*Y_eval[a]
-        return GP    
+            return (scale*Y_eval[a]).squeeze()
+        return GP
+    if d>1 or kernel == "RFF":
+        return RFF_GP(dimx=d,num_samples=num_samples_RFF)
 
-def get_train_data_GP_1d(generating_outcome_funcs,
+def get_train_data_GP(generating_outcome_funcs,
                          n_samples_exp = 200,
                          n_samples_obs = 1000, 
                          exp_range = (-1,1),
                          obs_range = (-3,3),
+                         d = 1,
                          T_prop = 0.5,
                          sigma_noise = 1,
                          kernel="RBF",
@@ -126,9 +139,9 @@ def get_train_data_GP_1d(generating_outcome_funcs,
     ucfd_GPs = [0,0]
 
     for i in range(2):
-        cfd_GPs[i] =GP_func(obs_range,kernel=kernel,num_samples_RFF=num_samples_RFF)
+        cfd_GPs[i] =GP_func(obs_range,kernel=kernel,num_samples_RFF=num_samples_RFF,d=d)
 
-        ucfd_GPs[i] =GP_func(obs_range,train_data=None,scale=1,kernel=kernel,num_samples_RFF=num_samples_RFF)
+        ucfd_GPs[i] =GP_func(obs_range,train_data=None,scale=1,kernel=kernel,num_samples_RFF=num_samples_RFF,d=d)
         
         
 
@@ -137,13 +150,13 @@ def get_train_data_GP_1d(generating_outcome_funcs,
     ucfded_GP_func = lambda X,T: cfded_GP_func(X,T) + (1-T)*ucfd_GPs[0](X) + (T)*ucfd_GPs[1](X)
     outcome_funcs_GP = outcome_funcs(cfounded_func=cfded_GP_func,uncfounded_func=ucfded_GP_func)
     X_range_obs = obs_range
-    X_obs = (X_range_obs[1] - X_range_obs[0]) * torch.rand(n_samples_obs) + X_range_obs[0]
+    X_obs = (X_range_obs[1] - X_range_obs[0]) * torch.rand((n_samples_obs,d)) + X_range_obs[0]
     T_obs = (torch.rand(n_samples_obs) > (1-T_prop)).type(torch.float)
     Y_obs = cfded_GP_func(X_obs,T_obs) + sigma_noise*torch.randn(n_samples_obs)
     obs_data_GP = data(X=X_obs,Y=Y_obs,T=T_obs)
 
     X_range_exp = exp_range
-    X_exp = (X_range_exp[1] - X_range_exp[0]) * torch.rand(n_samples_exp) + X_range_exp[0]
+    X_exp = (X_range_exp[1] - X_range_exp[0]) * torch.rand((n_samples_exp,d)) + X_range_exp[0]
     T_exp = (torch.rand(n_samples_exp) > (1-T_prop)).type(torch.float)
     Y_exp = ucfded_GP_func(X_exp,T_exp) + sigma_noise*torch.randn(n_samples_exp)
     exp_data_GP = data(X=X_exp,Y=Y_exp,T=T_exp)

@@ -91,7 +91,9 @@ class TrainedPseudoOutcome_MultitaskGPModel(gpytorch.models.ExactGP):
         guas_cross = self(torch.cat([x,x]) ,torch.cat([t1,t0]))
         CATE_mean = self.p_score*guas_cross.mean[:n] + (1-self.p_score)*guas_cross.mean[n:]
         CATE_covar = (self.p_score**2)*guas_cross.covariance_matrix[:n,:n] + (1-self.p_score)**2*guas_cross.covariance_matrix[n:,n:] + (1-self.p_score)*self.p_score*(guas_cross.covariance_matrix[:n,n:] + guas_cross.covariance_matrix[n:,:n])
-        CATE_covar = torch.diag(CATE_covar.diag())
+        CATE_covar = CATE_covar.diag()
+        CATE_covar[CATE_covar<1e-06] = 1e-06
+        CATE_covar = torch.diag(CATE_covar)
         return gpytorch.distributions.MultivariateNormal(CATE_mean, CATE_covar)
     
 class FixedPseudoOutcome_MultitaskGPModel(gpytorch.models.ExactGP):

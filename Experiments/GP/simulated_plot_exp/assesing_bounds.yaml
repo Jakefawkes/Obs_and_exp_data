@@ -1,13 +1,13 @@
 ################################################################################
 #   Twins ranking linear config
-# Run python experiments/GP/simulated_plot_exp/assesing_bounds.py --cfg=experiments/GP/simulated_plot_exp/assesing_bounds.yaml --o=results/paper_results/d=1
+# Run python experiments/GP/simulated_plot_exp/assesing_bounds.py --cfg=experiments/GP/simulated_plot_exp/assesing_bounds.yaml --o=results/paper_results/d=25
 ################################################################################
 
 data: 
   
   T_prop : 0.5
   
-  n_samples_exp : 1000
+  n_samples_exp : 200
 
   n_samples_obs : 1000
   
@@ -23,7 +23,7 @@ data:
 
   num_samples_RFF: 1000
 
-  d:  1
+  d:  25
 
 models : 
 

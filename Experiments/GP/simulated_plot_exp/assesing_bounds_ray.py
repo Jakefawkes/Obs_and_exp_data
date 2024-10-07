@@ -209,7 +209,7 @@ def run_exp(
         res_dict[model_name]["COVERAGE_OD"] = COVERAGE_OD
         res_dict[model_name]["Interval_width_OD"] = Interval_width_OD
 
-        return res_dict
+    return res_dict
 
 
 cfg_id = ray.put(cfg)

@@ -10,11 +10,11 @@ Options:
 
 
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["OPENBLAS_NUM_THREADS"] = "4"
+os.environ["MKL_NUM_THREADS"] = "4"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "4"
+os.environ["NUMEXPR_NUM_THREADS"] = "4"
 
 import math
 import torch
@@ -105,7 +105,7 @@ for model_name in cfg["models"]["model_list"]:
 
 print("Starting")
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=4)
 def run_exp(
     cfg, 
     plot_outcome_funcs, 

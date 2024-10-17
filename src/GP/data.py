@@ -2,6 +2,8 @@ import torch
 from collections import namedtuple
 import gpytorch
 from src.GP.GP import ExactGPModel
+from sklearn.datasets import make_regression
+import pandas as pd
 
 kallus_func = lambda X,U,T,eps: 1+T+X+2*T*X+0.5*X**2+0.75*T*X**2+U+0.5*eps
 
@@ -25,6 +27,23 @@ def return_CATE_GAP(outcome_func_tuple):
     CFDED_CATE = lambda X: outcome_func_tuple.cfounded_func(X,1) - outcome_func_tuple.cfounded_func(X,0)
     CATE_GAP = lambda X: TRUE_CATE(X) - CFDED_CATE(X) 
     return CATE_GAP
+
+def return_CATE_GAP_from_estimated(outcome_func_tuple,estimated_CATE):
+    TRUE_CATE = lambda X: outcome_func_tuple.uncfounded_func(X,1) - outcome_func_tuple.uncfounded_func(X,0)
+    CFDED_CATE = estimated_CATE
+    CATE_GAP = lambda X: TRUE_CATE(X) - CFDED_CATE(X) 
+    return CATE_GAP
+
+def asses_fit(model,X_id,Y_id,X_od,Y_od):
+    CATE_pred_guas_ID = model.CATE(X_id)
+    CATE_pred_guas_OD = model.CATE(X_od)
+    MSE_ID, COVERAGE_ID, Interval_width_ID = compare_cate_to_guas(Y_id,CATE_pred_guas_ID)
+    MSE_OD, COVERAGE_OD, Interval_width_OD = compare_cate_to_guas(Y_od,CATE_pred_guas_OD)
+    result_dict = {"MSE_ID":MSE_ID, "COVERAGE_ID":COVERAGE_ID, "Interval_width_ID":Interval_width_ID,
+                   "MSE_OD":MSE_OD, "COVERAGE_OD":COVERAGE_OD, "Interval_width_OD":Interval_width_OD}
+    # print(result_dict)
+    return result_dict
+    
 
 def get_pseudo_outcome_data(exp_data,T_prop=0.5):
     pseudo_outcome = ((exp_data.T - T_prop)/((T_prop)*(1-T_prop))) * exp_data.Y  
@@ -133,7 +152,8 @@ def get_train_data_GP(generating_outcome_funcs,
                          T_prop = 0.5,
                          sigma_noise = 1,
                          kernel="RBF",
-                         num_samples_RFF=100
+                         num_samples_RFF=100,
+                         sklearn_gen = False
                          ):
     cfd_GPs = [0,0]
     ucfd_GPs = [0,0]
@@ -142,23 +162,73 @@ def get_train_data_GP(generating_outcome_funcs,
         cfd_GPs[i] =GP_func(obs_range,kernel=kernel,num_samples_RFF=num_samples_RFF,d=d)
 
         ucfd_GPs[i] =GP_func(obs_range,train_data=None,scale=1,kernel=kernel,num_samples_RFF=num_samples_RFF,d=d)
-        
-        
+    if sklearn_gen:
+        X_obs,_ = make_regression(n_samples_obs,n_features=d,n_informative=1)
+        X_exp,_ = make_regression(n_samples_exp,n_features=d,n_informative=1)
+        X_obs,X_exp = torch.Tensor(X_obs),torch.Tensor(X_exp)
+
+    else:
+        X_range_obs = obs_range
+        X_obs = (X_range_obs[1] - X_range_obs[0]) * torch.rand((n_samples_obs,d)) + X_range_obs[0]
+        X_range_exp = exp_range
+        X_exp = (X_range_exp[1] - X_range_exp[0]) * torch.rand((n_samples_exp,d)) + X_range_exp[0]
 
     # cfded_GP_func = lambda X,T: (1-T)*cfd_GPs[0](X) + (T)*cfd_GPs[1](X)
     cfded_GP_func = generating_outcome_funcs.cfounded_func
     ucfded_GP_func = lambda X,T: cfded_GP_func(X,T) + (1-T)*ucfd_GPs[0](X) + (T)*ucfd_GPs[1](X)
     outcome_funcs_GP = outcome_funcs(cfounded_func=cfded_GP_func,uncfounded_func=ucfded_GP_func)
-    X_range_obs = obs_range
-    X_obs = (X_range_obs[1] - X_range_obs[0]) * torch.rand((n_samples_obs,d)) + X_range_obs[0]
+
     T_obs = (torch.rand(n_samples_obs) > (1-T_prop)).type(torch.float)
     Y_obs = cfded_GP_func(X_obs,T_obs) + sigma_noise*torch.randn(n_samples_obs)
     obs_data_GP = data(X=X_obs,Y=Y_obs,T=T_obs)
 
-    X_range_exp = exp_range
-    X_exp = (X_range_exp[1] - X_range_exp[0]) * torch.rand((n_samples_exp,d)) + X_range_exp[0]
+
     T_exp = (torch.rand(n_samples_exp) > (1-T_prop)).type(torch.float)
     Y_exp = ucfded_GP_func(X_exp,T_exp) + sigma_noise*torch.randn(n_samples_exp)
     exp_data_GP = data(X=X_exp,Y=Y_exp,T=T_exp)
 
     return exp_data_GP,obs_data_GP,outcome_funcs_GP
+
+def get_train_data_IHDP_Linear(n_samples_exp = 100,
+                            T_prop = 0.5,
+                            W_prop = 0.4,
+                            WT_prop = 0.3,
+                            sigma_noise = 0.5,
+                            n_samples_obs = 1000,
+                         num_samples_RFF=1500,
+                         ):
+   
+   ihdp_table = pd.read_csv('src/data/ihdp.csv')
+   ihdp_table.iloc[:,1:7] = (ihdp_table.iloc[:,1:7] - ihdp_table.iloc[:,1:7].mean())/(ihdp_table.iloc[:,1:7].std())
+   
+   df_obs = ihdp_table.sample(n=n_samples_obs,replace=True)
+   T_obs = torch.tensor(df_obs.treat.values)
+   X_obs = torch.tensor(df_obs.iloc[:,1:].values).type(torch.float)
+   d = X_obs.shape[1]
+   w0 = (torch.randn(d)* (torch.rand(d) >(1-W_prop))).type(torch.float)
+   w1 = (torch.randn(d)* (torch.rand(d) >(1-WT_prop))).type(torch.float)
+   cfd_GPs = [0,0]
+   ucfd_GPs = [0,0]
+
+   for i in range(2):
+      cfd_GPs[i] =GP_func((-1,1),kernel="RFF",num_samples_RFF=1500,d=d)
+
+      ucfd_GPs[i] =GP_func((-1,1),train_data=None,scale=1,kernel="RFF",num_samples_RFF=num_samples_RFF,d=d)
+
+   cfded_GP_func = lambda X,T: (X @ w0) + T*(X @ w1)
+   ucfded_GP_func = lambda X,T: cfded_GP_func(X,T) + (1-T)*ucfd_GPs[0](X) + (T)*ucfd_GPs[1](X)
+   outcome_funcs_GP = outcome_funcs(cfounded_func=cfded_GP_func,uncfounded_func=ucfded_GP_func)
+
+   Y_obs = cfded_GP_func(X_obs,T_obs) + sigma_noise*(torch.randn(len(T_obs)))
+
+   df_exp = ihdp_table.sample(n=n_samples_exp,weights=((0.8*(ihdp_table.cig))* (0.8*(ihdp_table.sex))),replace=True)
+   T_exp = (torch.rand(n_samples_exp) > (1-T_prop)).type(torch.float)
+   X_exp = torch.tensor(df_exp.iloc[:,1:].values).type(torch.float)
+
+
+   Y_exp = ucfded_GP_func(X_exp,T_exp) + sigma_noise*(torch.randn(len(T_exp)))
+
+   obs_data_GP = data(X=X_obs,Y=Y_obs,T=T_obs)
+   exp_data_GP = data(X=X_exp,Y=Y_exp,T=T_exp)
+
+   return exp_data_GP,obs_data_GP,outcome_funcs_GP

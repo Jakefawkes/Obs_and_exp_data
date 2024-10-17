@@ -1,29 +1,23 @@
 ################################################################################
 #   Twins ranking linear config
-# Run python experiments/GP/simulated_plot_exp/assesing_bounds.py --cfg=experiments/GP/simulated_plot_exp/assesing_bounds.yaml --o=results/paper_results/d=25
+# Run python experiments/GP/IHDP_exp/assesing_bounds.py --cfg=experiments/GP/IHDP_exp/assesing_bounds.yaml --o=results/IHDP
 ################################################################################
 
 data: 
   
-  T_prop : 0.9
+  T_prop : 0.5
   
-  n_samples_exp : 200
+  n_samples_exp : 400
 
   n_samples_obs : 1000
   
   sigma_noise: 0.5
 
-  exp_range: [-1,1]
+  W_prop : 0.4
 
-  obs_range : [-3,3]
+  WT_prop : 0.5
 
-  outcome_funcs: plot_outcome_funcs
-
-  data_generating_kernel: RFF
-
-  num_samples_RFF: 1000
-
-  d:  25
+  num_samples_RFF: 1500
 
 models : 
 
@@ -36,6 +30,8 @@ models :
   likelihood: Guassian
 
   lr: 0.1
+
+  fit_linear : True
 
 experiment:
 

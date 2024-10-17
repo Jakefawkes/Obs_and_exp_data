@@ -2,7 +2,16 @@ import torch
 import yaml
 import pandas as pd
 
-
+def asses_fit(model,X_id,Y_id,X_od,Y_od):
+    CATE_pred_guas_ID = model.CATE(X_id)
+    CATE_pred_guas_OD = model.CATE(X_od)
+    MSE_ID, COVERAGE_ID, Interval_width_ID = compare_cate_to_guas(Y_id,CATE_pred_guas_ID)
+    MSE_OD, COVERAGE_OD, Interval_width_OD = compare_cate_to_guas(Y_od,CATE_pred_guas_OD)
+    result_dict = {"MSE_ID":MSE_ID, "COVERAGE_ID":COVERAGE_ID, "Interval_width_ID":Interval_width_ID,
+                   "MSE_OD":MSE_OD, "COVERAGE_OD":COVERAGE_OD, "Interval_width_OD":Interval_width_OD}
+    # print(result_dict)
+    return result_dict
+    
 def multidim_linspace(start, end, steps, dtype=torch.float32):
     """
     Create a multi-dimensional tensor with evenly spaced values between start and end.
@@ -69,3 +78,13 @@ def summerise_results(results_path):
     stats = df.groupby(['model']).agg(['mean', 'std'])
 
     return stats
+
+def asses_fit(model,X_id,Y_id,X_od,Y_od):
+    CATE_pred_guas_ID = model.CATE(X_id)
+    CATE_pred_guas_OD = model.CATE(X_od)
+    MSE_ID, COVERAGE_ID, Interval_width_ID = compare_cate_to_guas(Y_id,CATE_pred_guas_ID)
+    MSE_OD, COVERAGE_OD, Interval_width_OD = compare_cate_to_guas(Y_od,CATE_pred_guas_OD)
+    result_dict = {"MSE_ID":MSE_ID, "COVERAGE_ID":COVERAGE_ID, "Interval_width_ID":Interval_width_ID,
+                   "MSE_OD":MSE_OD, "COVERAGE_OD":COVERAGE_OD, "Interval_width_OD":Interval_width_OD}
+    # print(result_dict)
+    return result_dict

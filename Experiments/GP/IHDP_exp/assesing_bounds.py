@@ -86,6 +86,8 @@ for model_name in cfg["models"]["model_list"]:
 
 print("Starting")
 
+
+
 for i in tqdm(range(cfg["experiment"]["n_runs"])):
 
     exp_data,obs_data,outcome_funcs_GP = get_train_data_IHDP_Linear(
@@ -146,7 +148,14 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
         
         model.eval()
         likelihood.eval()
-        exp_data_test,obs_data_test,_ = get_train_data_IHDP_Linear(n_samples_exp=500,n_samples_obs=2000)
+        exp_data_test,obs_data_test,_ = get_train_data_IHDP_Linear(
+                            n_samples_exp = 500,
+                            n_samples_obs = 2000, 
+                            T_prop = T_prop,
+                            sigma_noise=cfg["data"]["sigma_noise"],
+                            num_samples_RFF=cfg["data"]["num_samples_RFF"],
+                            W_prop=cfg["data"]["W_prop"],
+                            WT_prop=cfg["data"]["WT_prop"])
                                                                 
         X_in_dist = exp_data_test.X
         X_out_dist = obs_data_test.X
@@ -174,5 +183,3 @@ for i in tqdm(range(cfg["experiment"]["n_runs"])):
 
     with open(dump_path, 'w') as f:
             yaml.dump(results_dict, f)
-
-

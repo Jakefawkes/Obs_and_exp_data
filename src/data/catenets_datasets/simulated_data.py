@@ -27,7 +27,8 @@ def simulate_treatment_setup(
     mu_1_model_params: Optional[dict] = None,
     error_sd: float = 1,
     seed: int = 42,
-    normalise = True
+    normalise = True,
+    test_dataloader = False
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Generic function to flexibly simulate a treatment setup.
@@ -126,12 +127,29 @@ def simulate_treatment_setup(
     # generate observables
     y = w * mu_1 + (1 - w) * mu_0 + error_sd*torch.randn(n)
 
-    y_mean = y.mean()
-    y_std = y.std() 
+    if normalise:
+        y_mean = y.mean()
+        y_std = y.std() 
 
-    y = (y-y_mean)/y_std
+        y = (y-y_mean)/y_std
+        
+        cate = cate/y_std
     
-    cate = cate/y_std
+    # if len(y.shape) == 1:
+    #     y = y.unsqueeze(1)
+
+    if test_dataloader:
+
+        y = X[:,:1]
+
+        # c=torch.tensor([2, -3.4])
+        # b=4.2
+        # noise=0.01
+        # X = torch.randn(n, len(c))
+        # noise = torch.randn(n, 1) * noise
+        # y = torch.matmul(X, c.reshape((-1, 1))) + b + noise
+        # t = torch.ones_like(y)
+
     return X, y, w, p, cate
 
 

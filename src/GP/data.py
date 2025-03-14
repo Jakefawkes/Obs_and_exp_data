@@ -232,3 +232,50 @@ def get_train_data_IHDP_Linear(n_samples_exp = 100,
    exp_data_GP = data(X=X_exp,Y=Y_exp,T=T_exp)
 
    return exp_data_GP,obs_data_GP,outcome_funcs_GP
+
+def get_train_data_IHDP_Linear_robust(n_samples_exp = 100,
+                            T_prop = 0.5,
+                            W_prop = 0.4,
+                            WT_prop = 0.3,
+                            sigma_noise = 0.5,
+                            n_samples_obs = 1000,
+                         num_samples_RFF=1500,
+                         ):
+   
+   ihdp_table = pd.read_csv('src/data/ihdp.csv')
+   ihdp_table.iloc[:,1:7] = (ihdp_table.iloc[:,1:7] - ihdp_table.iloc[:,1:7].mean())/(ihdp_table.iloc[:,1:7].std())
+   
+   df_obs = ihdp_table.sample(n=n_samples_obs,replace=True)
+   T_obs = torch.tensor(df_obs.treat.values)
+   X_obs = torch.tensor(df_obs.iloc[:,1:].values).type(torch.float)
+   d = X_obs.shape[1]
+   w0 = (torch.randn(d)* (torch.rand(d) >(1-W_prop))).type(torch.float)
+   w1 = (torch.randn(d)* (torch.rand(d) >(1-WT_prop))).type(torch.float)
+
+   w1_2 = (torch.randn(d)* (torch.rand(d) >(1-WT_prop))).type(torch.float)
+   w0_2 = (torch.randn(d)* (torch.rand(d) >(1-W_prop))).type(torch.float)
+   cfd_GPs = [0,0]
+   ucfd_GPs = [0,0]
+
+   for i in range(2):
+      cfd_GPs[i] =GP_func((-1,1),kernel="RFF",num_samples_RFF=1500,d=d)
+
+      ucfd_GPs[i] =GP_func((-1,1),train_data=None,scale=1,kernel="RFF",num_samples_RFF=num_samples_RFF,d=d)
+
+   cfded_GP_func = lambda X,T:   (torch.abs(X)**0.5 @ w0_2) + T*(torch.abs(X)**0.5 @ w1_2)
+   ucfded_GP_func = lambda X,T: cfded_GP_func(X,T) + (1-T)*ucfd_GPs[0](X) + (T)*ucfd_GPs[1](X)
+   outcome_funcs_GP = outcome_funcs(cfounded_func=cfded_GP_func,uncfounded_func=ucfded_GP_func)
+
+   Y_obs = cfded_GP_func(X_obs,T_obs) + sigma_noise*(torch.randn(len(T_obs)))
+
+   df_exp = ihdp_table.sample(n=n_samples_exp,weights=((0.8*(ihdp_table.cig))* (0.8*(ihdp_table.sex))),replace=True)
+   T_exp = (torch.rand(n_samples_exp) > (1-T_prop)).type(torch.float)
+   X_exp = torch.tensor(df_exp.iloc[:,1:].values).type(torch.float)
+
+
+   Y_exp = ucfded_GP_func(X_exp,T_exp) + sigma_noise*(torch.randn(len(T_exp)))
+
+   obs_data_GP = data(X=X_obs,Y=Y_obs,T=T_obs)
+   exp_data_GP = data(X=X_exp,Y=Y_exp,T=T_exp)
+
+   return exp_data_GP,obs_data_GP,outcome_funcs_GP

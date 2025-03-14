@@ -9,13 +9,13 @@ data:
   
   n_samples_exp : 400
 
-  n_samples_obs : 1000
+  n_samples_obs : 2000
   
   sigma_noise: 0.5
 
-  W_prop : 0.4
+  W_prop : 0.2
 
-  WT_prop : 0.5
+  WT_prop : 0.2
 
   num_samples_RFF: 1500
 
@@ -39,7 +39,7 @@ experiment:
 
     hyperparam_train: True
 
-    n_runs: 100
+    n_runs: 20
 
     surpress_warnings: True
 

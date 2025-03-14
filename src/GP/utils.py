@@ -1,6 +1,29 @@
 import torch
 import yaml
 import pandas as pd
+import math
+
+def calc_bound_IDHP(tau,alpha = 0.95):
+
+    bounding_number = (1+1/tau)**7*2**21
+
+    log_bounding_number = (2*math.log(bounding_number/alpha))**0.5
+
+    return log_bounding_number,bounding_number
+
+def calc_bounding_term(model,CATE_pred_guas,tau= 0.00000001):
+    term_1 = (calc_bound_IDHP(tau)[0]*CATE_pred_guas.stddev)
+    N = model.prediction_strategy.mean_cache.shape[0]
+    term_2 = ((N)**0.5*model.prediction_strategy.mean_cache.norm()).item()*tau
+    term_3 = calc_bound_IDHP(tau)[0]* (2*tau*(1+N*model.prediction_strategy.covar_cache.norm()))
+    return term_1 + term_2 + term_3
+
+def compare_unif_bound_guas(CATE,model,CATE_pred_guas,tau= 0.00000001):
+    bounding_term = calc_bounding_term(model,CATE_pred_guas,tau= tau)
+    region_lower,region_upper = CATE_pred_guas.mean - bounding_term, CATE_pred_guas.mean + bounding_term
+    CATE_coverage = (torch.logical_and((region_lower < CATE),(region_upper > CATE))).float().mean()
+    average_interval_width = (region_upper - region_lower).mean()
+    return CATE_coverage.item(),average_interval_width.item()
 
 def asses_fit(model,X_id,Y_id,X_od,Y_od):
     CATE_pred_guas_ID = model.CATE(X_id)
@@ -44,7 +67,7 @@ def multidim_linspace(start, end, steps, dtype=torch.float32):
     # Stack the grids to create the final tensor
     return torch.stack(grids)
 
-def custom_confidence_region(MultivariateNormal,alpha=1.96):
+def custom_confidence_region(MultivariateNormal,alpha=1.96,uniform_bound = False):
         """
         Returns alpha standard deviations above and below the mean.
 
@@ -64,6 +87,7 @@ def compare_cate_to_guas(CATE,CATE_pred_guas):
     average_interval_width = (region_upper - region_lower).mean()
     
     return CATE_MSE.item(),CATE_coverage.item(),average_interval_width.item()
+
 
 def summerise_results(results_path):
 
